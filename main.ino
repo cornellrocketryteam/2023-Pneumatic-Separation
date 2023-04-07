@@ -10,8 +10,6 @@
 
 #include "MS5611.h"
 
-#include <RadioLib.h>
-
 using namespace std;
 
 SYSTEMS current_state = {
@@ -29,8 +27,6 @@ SYSTEMS current_state = {
 	 false}, // MAG
 	{0, 1000,
 	 false}, // SD
-	{RADIOLIB_ERR_NONE,
-	 false} // RF
 
 };
 
@@ -42,7 +38,7 @@ MS5611 ms5611;
 Adafruit_MCP9808 mcp9808;
 #define SEA_LEVEL_PRESURE 102106.3 // Calculated using Duffield hall senior meche lounge as reference, 246.48 m in elevation
 
-#define SEPARATION 22
+#define SEPARATION 19
 
 #define LED 25
 
@@ -57,7 +53,7 @@ double filtered_alt2 = 0.0; // The previous filtered altitude
 double filtered_alt3 = 0.0; // the most recent relative alt run through a boxcar filter
 
 bool deployed = false;
-unsigned long drogue_deploy_start;
+unsigned long separation_start;
 
 
 void init_sensors()
@@ -137,12 +133,12 @@ bool seperation_logic(bool a)
 	if (a && !deployed && current_state.ALTIMETER.REL_ALTITUDE < 914.4) // below 3000 feet
 	{
 		//Log.debug("Beginning wire heating");
-		digitalWrite(SEPARATION, HIGH);
-		drogue_deploy_start = millis();
+		analogWrite(SEPARATION, 123);
+		separation_start = millis();
 		deployed = true;
 	}
 
-	if (deployed && millis() - drogue_deploy_start > 12000)
+	if (deployed && millis() - separation_start > 12000)
 	{
 		//Log.debug("End wire heating");
 	  digitalWrite(SEPARATION, LOW);
@@ -154,6 +150,7 @@ bool seperation_logic(bool a)
 void setup()
 {
 	Serial.begin(115200);
+  analogWriteFreq(10000);
 	// init_sd();
 	// init_rf();
 	pinMode(SEPARATION, OUTPUT);
