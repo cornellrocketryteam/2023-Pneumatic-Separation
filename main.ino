@@ -53,6 +53,8 @@ double filtered_alt2 = 0.0; // The previous filtered altitude
 double filtered_alt3 = 0.0; // the most recent relative alt run through a boxcar filter
 
 bool deployed = false;
+bool armed = false;
+int arm_time = 0;
 unsigned long separation_start;
 
 
@@ -130,12 +132,18 @@ bool seperation_logic(bool a)
 		//Log.debug("Arming altitude reached (5000 ft)");
 	}
 
-	if (a && !deployed && current_state.ALTIMETER.REL_ALTITUDE < 914.4) // below 3000 feet
+	if (a && !deployed && current_state.ALTIMETER.REL_ALTITUDE < 914.4 && armed && millis() - arm_time > 150) // below 3000 feet
 	{
-		//Log.debug("Beginning wire heating");
 		analogWrite(SEPARATION, 123);
 		separation_start = millis();
 		deployed = true;
+	}
+
+  if (a && !deployed && current_state.ALTIMETER.REL_ALTITUDE < 914.4 && !armed) // below 3000 feet
+	{
+		armed = true;
+    arm_time = millis();
+    digitalWrite(SEPARATION, HIGH)
 	}
 
 	if (deployed && millis() - separation_start > 12000)
