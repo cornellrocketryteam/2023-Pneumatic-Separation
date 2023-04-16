@@ -2,15 +2,18 @@
 #include <String.h>
 
 #include <Wire.h>
-#include <EEPROM.h>
 #include <SPI.h>
-#include <Adafruit_MCP9808.h>
 
 #include "main.h"
 
 #include "MS5611.h"
 
+#include "RP2040_PWM.h"
+
 using namespace std;
+
+//creates pwm instance
+RP2040_PWM* PWM_Instance;
 
 SYSTEMS current_state = {
 
@@ -34,8 +37,6 @@ SYSTEMS current_state = {
 // MS5611 Altimeter
 MS5611 ms5611;
 
-//MCP9808 Thermometer
-Adafruit_MCP9808 mcp9808;
 #define SEA_LEVEL_PRESURE 102106.3 // Calculated using Duffield hall senior meche lounge as reference, 246.48 m in elevation
 
 #define SEPARATION 19
@@ -53,22 +54,25 @@ double filtered_alt2 = 0.0; // The previous filtered altitude
 double filtered_alt3 = 0.0; // the most recent relative alt run through a boxcar filter
 
 bool deployed = false;
-bool armed = false;
+bool sep_armed = false;
 int arm_time = 0;
 unsigned long separation_start;
 
 
 void init_sensors()
 {
-  Wire.setSDA(21);
-  Wire.setSCL(20);
+  // Wire.setSDA(21);
+  // Wire.setSCL(20);
+  Serial.println("first");
 	Wire.begin();
+  Serial.println("second");
 
 
 	// MS5611 Altimeter
 
   if (ms5611.begin())
 	{
+    Serial.println("it began");
 		// This check actually freezes the processor if it fails,
 		// Need to fix the library to fail gracefully
 		current_state.ALTIMETER.INIT = true;
@@ -79,6 +83,7 @@ void init_sensors()
     Serial.print("ALTIMETER UNABLE TO INITIALIZE\n");
 
 	//	Log.critical("ALTIMETER UNABLE TO INITIALIZE\n");
+  Serial.println("End");
 }
 
 void poll_sensors()
@@ -123,31 +128,40 @@ void run_filter()
 	}
 }
 
+// arm at 1524m and trigger below 914.4m
+const float arm_alt = 0.5;
+const float trigger_alt = 0.5;
+
 bool seperation_logic(bool a)
 {
-
-	if (!a && current_state.ALTIMETER.REL_ALTITUDE > 1524) // above 5000 feet (1524 m)
+  Serial.println(current_state.ALTIMETER.REL_ALTITUDE);
+	if (!a && current_state.ALTIMETER.REL_ALTITUDE > arm_alt) // above 5000 feet (1524 m)
 	{
+    Serial.println("Armed");
 		a = true;
 		//Log.debug("Arming altitude reached (5000 ft)");
 	}
 
-	if (a && !deployed && current_state.ALTIMETER.REL_ALTITUDE < 914.4 && armed && millis() - arm_time > 150) // below 3000 feet
+	if (a && !deployed && current_state.ALTIMETER.REL_ALTITUDE < trigger_alt && sep_armed && millis() - arm_time > 150) // below 3000 feet
 	{
-		analogWrite(SEPARATION, 123);
+    Serial.println("PWM Signal");
+		PWM_Instance->setPWM(SEPARATION, 10000, 50);
+    // analogWrite(SEPARATION, 123);
 		separation_start = millis();
 		deployed = true;
 	}
 
-  if (a && !deployed && current_state.ALTIMETER.REL_ALTITUDE < 914.4 && !armed) // below 3000 feet
+  if (a && !deployed && current_state.ALTIMETER.REL_ALTITUDE < trigger_alt && !sep_armed) // below 3000 feet
 	{
-		armed = true;
+    Serial.println("High Signal");
+		sep_armed = true;
     arm_time = millis();
-    digitalWrite(SEPARATION, HIGH)
+    digitalWrite(SEPARATION, HIGH);
 	}
 
 	if (deployed && millis() - separation_start > 12000)
 	{
+    Serial.println("Done");
 		//Log.debug("End wire heating");
 	  digitalWrite(SEPARATION, LOW);
 	}
@@ -157,16 +171,26 @@ bool seperation_logic(bool a)
 
 void setup()
 {
+  delay(5000);
 	Serial.begin(115200);
-  analogWriteFreq(10000);
+  Serial.println("In setup");
+  PWM_Instance = new RP2040_PWM(SEPARATION, 10000, 0);
+  Serial.println("1");
+  // analogWriteFreq(10000);
 	// init_sd();
 	// init_rf();
 	pinMode(SEPARATION, OUTPUT);
+  Serial.println("2");
   pinMode(LED, OUTPUT); // LED
+  Serial.println("3");
   init_sensors();
+  Serial.println("4");
   digitalWrite(LED, HIGH);
+  Serial.println("5");
   delay(2000);
+  Serial.println("6");
   digitalWrite(LED,LOW);
+  Serial.println("7");
 }
 
 void loop()
